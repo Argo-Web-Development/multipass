@@ -91,6 +91,7 @@ public:
     QByteArray read_all_standard_output() override;
     QByteArray read_all_standard_error() override;
     qint64 write(const QByteArray& data) override;
+    void setup_child_process() override;
 
 private:
     const std::unique_ptr<ProcessSpec> spec;

@@ -96,6 +96,10 @@ public:
     {
         return "";
     }
+
+    void setup_child_process() override
+    {
+    }
 };
 } // namespace
 

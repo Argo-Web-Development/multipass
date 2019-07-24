@@ -31,6 +31,8 @@ public:
     QString program() const override;
     QStringList arguments() const override;
 
+    QString apparmor_profile() const override;
+
 private:
     const QStringList args;
 };

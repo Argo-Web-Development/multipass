@@ -63,6 +63,9 @@ signals:
 
     void ready_read_standard_output();
     void ready_read_standard_error();
+
+protected:
+    virtual void setup_child_process() = 0;
 };
 } // namespace multipass
 #endif // MULTIPASS_PROCESS_H

@@ -17,110 +17,133 @@
 
 #include "linux_process.h"
 #include "process_spec.h"
+#include <QProcess>
 
 #include <multipass/logging/log.h>
 
 namespace mp = multipass;
 namespace mpl = multipass::logging;
 
-mp::LinuxProcess::LinuxProcess(std::unique_ptr<mp::ProcessSpec>&& spec) : process_spec{std::move(spec)}
+class mp::CustomQProcess : public QProcess
 {
-    connect(&process, &QProcess::started, this, &mp::Process::started);
-    connect(&process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this, &mp::Process::finished);
-    connect(&process, &QProcess::errorOccurred, this, &mp::Process::error_occurred);
-    connect(&process, &QProcess::readyReadStandardOutput, this, &mp::Process::ready_read_standard_output);
-    connect(&process, &QProcess::readyReadStandardError, this, &mp::Process::ready_read_standard_error);
+public:
+    CustomQProcess(LinuxProcess* p) : p{p}
+    {
+    }
 
-    process.setProgram(process_spec->program());
-    process.setArguments(process_spec->arguments());
-    process.setProcessEnvironment(process_spec->environment());
+    void setupChildProcess() override
+    {
+        p->setup_child_process();
+    }
+
+    LinuxProcess* p;
+};
+
+mp::LinuxProcess::LinuxProcess(std::unique_ptr<mp::ProcessSpec>&& spec)
+    : process_spec{std::move(spec)}, process{std::make_unique<mp::CustomQProcess>(this)}
+{
+    connect(process.get(), &QProcess::started, this, &mp::Process::started);
+    connect(process.get(), qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this, &mp::Process::finished);
+    connect(process.get(), &QProcess::errorOccurred, this, &mp::Process::error_occurred);
+    connect(process.get(), &QProcess::readyReadStandardOutput, this, &mp::Process::ready_read_standard_output);
+    connect(process.get(), &QProcess::readyReadStandardError, this, &mp::Process::ready_read_standard_error);
+
+    process->setProgram(process_spec->program());
+    process->setArguments(process_spec->arguments());
+    process->setProcessEnvironment(process_spec->environment());
     if (!process_spec->working_directory().isNull())
-        process.setWorkingDirectory(process_spec->working_directory());
+        process->setWorkingDirectory(process_spec->working_directory());
 
     // TODO: multiline output produces poor formatting in logs, needs improving
-    QObject::connect(&process, &QProcess::readyReadStandardError, [this]() {
+    QObject::connect(process.get(), &QProcess::readyReadStandardError, [this]() {
         mpl::log(process_spec->error_log_level(), qPrintable(process_spec->program()),
-                 qPrintable(process.readAllStandardError()));
+                 qPrintable(process->readAllStandardError()));
     });
 }
 
+mp::LinuxProcess::~LinuxProcess() = default;
+
 QString mp::LinuxProcess::program() const
 {
-    return process.program();
+    return process->program();
 }
 
 QStringList mp::LinuxProcess::arguments() const
 {
-    return process.arguments();
+    return process->arguments();
 }
 
 QString mp::LinuxProcess::working_directory() const
 {
-    return process.workingDirectory();
+    return process->workingDirectory();
 }
 
 QProcessEnvironment mp::LinuxProcess::process_environment() const
 {
-    return process.processEnvironment();
+    return process->processEnvironment();
 }
 
 void mp::LinuxProcess::start()
 {
-    process.start();
+    process->start();
 }
 
 void mp::LinuxProcess::kill()
 {
-    process.kill();
+    process->kill();
 }
 
 bool mp::LinuxProcess::wait_for_started(int msecs)
 {
-    return process.waitForStarted(msecs);
+    return process->waitForStarted(msecs);
 }
 
 bool mp::LinuxProcess::wait_for_finished(int msecs)
 {
-    return process.waitForFinished(msecs);
+    return process->waitForFinished(msecs);
 }
 
 bool mp::LinuxProcess::running() const
 {
-    return process.state() == QProcess::Running;
+    return process->state() == QProcess::Running;
 }
 
 QByteArray multipass::LinuxProcess::read_all_standard_output()
 {
-    return process.readAllStandardOutput();
+    return process->readAllStandardOutput();
 }
 
 QByteArray multipass::LinuxProcess::read_all_standard_error()
 {
-    return process.readAllStandardError();
+    return process->readAllStandardError();
 }
 
 qint64 mp::LinuxProcess::write(const QByteArray& data)
 {
-    return process.write(data);
+    return process->write(data);
 }
 
 bool mp::LinuxProcess::run_and_return_status(const int timeout)
 {
     run_and_wait_until_finished(timeout);
-    return process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0;
+    return process->exitStatus() == QProcess::NormalExit && process->exitCode() == 0;
 }
 
 QString mp::LinuxProcess::run_and_return_output(const int timeout)
 {
     run_and_wait_until_finished(timeout);
-    return process.readAllStandardOutput().trimmed();
+    return process->readAllStandardOutput().trimmed();
 }
 
 void mp::LinuxProcess::run_and_wait_until_finished(const int timeout)
 {
     start();
-    if (!process.waitForFinished(timeout) || process.exitStatus() != QProcess::NormalExit)
+    if (!process->waitForFinished(timeout) || process->exitStatus() != QProcess::NormalExit)
     {
-        mpl::log(mpl::Level::error, qPrintable(process_spec->program()), qPrintable(process.errorString()));
+        mpl::log(mpl::Level::error, qPrintable(process_spec->program()), qPrintable(process->errorString()));
     }
+}
+
+void mp::LinuxProcess::setup_child_process()
+{
 }
